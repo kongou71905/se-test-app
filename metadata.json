@@ -1,0 +1,8 @@
+{
+  "name": "麻雀成績管理",
+  "description": "iPad mini 6最適化の麻雀成績管理SPA。半荘・東風、持ち点/返し点、ウマ、飛び・焼き鳥・チップ、精算集計、過去データ閲覧・編集に対応。",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
