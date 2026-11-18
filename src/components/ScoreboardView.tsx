@@ -234,7 +234,7 @@ export const ScoreboardView: React.FC<ScoreboardViewProps> = ({
 
       {/* Scrollable Sticky Scoreboard Table */}
       <div className="sticky-table-wrap">
-        <table className="score-table">
+        <table className="score-table scoreboard-table">
           <thead>
             <tr>
               <th className="sticky-col">試合</th>
@@ -298,10 +298,33 @@ export const ScoreboardView: React.FC<ScoreboardViewProps> = ({
                             className="text-xs tabular-nums"
                             style={{ color: 'var(--color-text-muted)' }}
                           >
-                            {d.wind} · {d.rank}着
-                            {d.is_tobi ? ' 飛' : ''}
-                            {d.tobi_count > 0 ? ` 飛+${d.tobi_count}` : ''}
-                            {d.is_yakitori ? ' 焼' : ''}
+                            <span>
+                              {d.wind} · {d.rank}着
+                            </span>
+                            {d.tobi_count > 0 && (
+                              <span
+                                className="ml-1 font-bold"
+                                style={{ color: 'var(--color-positive)' }}
+                              >
+                                飛
+                              </span>
+                            )}
+                            {d.is_tobi && (
+                              <span
+                                className="ml-1 font-bold"
+                                style={{ color: 'var(--color-negative)' }}
+                              >
+                                飛
+                              </span>
+                            )}
+                            {d.is_yakitori && (
+                              <span
+                                className="ml-1 font-bold"
+                                style={{ color: 'var(--color-negative)' }}
+                              >
+                                鳥
+                              </span>
+                            )}
                           </div>
                         </td>
                       );

@@ -299,6 +299,10 @@ body {
   min-width: 108px;
 }
 
+.scoreboard-table .sticky-col {
+  text-align: center;
+}
+
 .score-table thead th.sticky-col {
   z-index: 30;
 }
