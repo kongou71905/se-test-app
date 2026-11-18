@@ -211,7 +211,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               <th className="sticky-col">日付</th>
               {visibleColumns.map((p) => (
                 <th key={p.player_id}>
-                  <span className="block truncate max-w-[110px] mx-auto">
+                  <span className="block truncate max-w-[128px] mx-auto">
                     {p.name}
                   </span>
                 </th>
@@ -276,11 +276,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                   className="cursor-pointer hover:bg-[#faf9f5] transition-colors"
                 >
                   <th className="sticky-col">
-                    <div className="tabular-nums text-xs font-bold">
+                    <div className="tabular-nums text-xs font-bold whitespace-nowrap">
                       {row.date}
                     </div>
                     <div
-                      className="text-[11px] font-normal tabular-nums"
+                      className="text-xs font-normal tabular-nums"
                       style={{ color: 'var(--color-text-muted)' }}
                     >
                       {row.gameCount}戦
@@ -301,7 +301,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                     return (
                       <td
                         key={p.player_id}
-                        className={`text-sm font-bold tabular-nums ${pointClass(
+                        className={`text-base font-bold tabular-nums ${pointClass(
                           rec.total_point
                         )}`}
                       >

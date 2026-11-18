@@ -240,7 +240,7 @@ export const ScoreboardView: React.FC<ScoreboardViewProps> = ({
               <th className="sticky-col">試合</th>
               {participants.map((p) => (
                 <th key={p.player_id}>
-                  <span className="block truncate max-w-[110px] mx-auto">
+                  <span className="block truncate max-w-[128px] mx-auto">
                     {p.name}
                   </span>
                 </th>
@@ -288,14 +288,14 @@ export const ScoreboardView: React.FC<ScoreboardViewProps> = ({
                       return (
                         <td key={p.player_id}>
                           <div
-                            className={`text-sm font-bold tabular-nums ${pointClass(
+                            className={`text-base font-bold tabular-nums ${pointClass(
                               d.final_point
                             )}`}
                           >
                             {formatPoint(d.final_point)}
                           </div>
                           <div
-                            className="text-[11px] tabular-nums"
+                            className="text-xs tabular-nums"
                             style={{ color: 'var(--color-text-muted)' }}
                           >
                             {d.wind} · {d.rank}着
