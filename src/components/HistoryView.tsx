@@ -2,21 +2,25 @@ import React, { useMemo, useState } from 'react';
 import { Calendar, X } from 'lucide-react';
 import {
   DailyRecord,
+  DraftGame,
   GameDetail,
   Player,
   RuleConfig,
   SessionDraft,
+  WINDS,
 } from '../types/mahjong';
-import { formatPoint, normalizeZero } from '../utils/mahjongCalc';
-import { HistoryDetailModal } from './HistoryDetailModal';
+import {
+  formatPoint,
+  normalizeZero,
+  parseRuleSnapshot,
+} from '../utils/mahjongCalc';
 
 interface HistoryViewProps {
   players: Player[];
   dailyRecords: DailyRecord[];
   gameDetails: GameDetail[];
   currentRules: RuleConfig;
-  onEditSession: (draft: SessionDraft) => void;
-  onDeleteSession: (sessionId: string) => Promise<void>;
+  onViewSession: (draft: SessionDraft) => void;
   onBack: () => void;
 }
 
@@ -33,13 +37,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   dailyRecords,
   gameDetails,
   currentRules,
-  onEditSession,
-  onDeleteSession,
+  onViewSession,
   onBack,
 }) => {
   const [selectedPeriod, setSelectedPeriod] = useState<string>('ALL');
   const [periodModalOpen, setPeriodModalOpen] = useState(false);
-  const [detailSessionId, setDetailSessionId] = useState<string | null>(null);
 
   const availableYears = useMemo(() => {
     const years = new Set<string>();
@@ -155,18 +157,69 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
     return { totalPoints, gameCounts, avgRank };
   }, [filteredDaily, filteredGames, visibleColumns]);
 
-  const activeDetailSession = useMemo(() => {
-    if (!detailSessionId) return null;
-    const recs = dailyRecords.filter((r) => r.session_id === detailSessionId);
-    if (recs.length === 0) return null;
-    const details = gameDetails.filter((g) => g.session_id === detailSessionId);
-    return {
-      sessionId: detailSessionId,
-      date: recs[0].date,
-      dailyRecords: recs,
-      gameDetails: details,
-    };
-  }, [detailSessionId, dailyRecords, gameDetails]);
+  const handleOpenSessionView = (row: SessionRowGroup) => {
+    const recs = dailyRecords.filter((r) => r.session_id === row.session_id);
+    const details = gameDetails.filter((g) => g.session_id === row.session_id);
+    const appliedRules = parseRuleSnapshot(
+      recs[0]?.rule_snapshot,
+      currentRules
+    );
+
+    const playerMap = new Map(players.map((p) => [p.player_id, p]));
+    const getPlayerName = (playerId: string, fallbackName: string) =>
+      playerMap.get(playerId)?.name ?? fallbackName;
+
+    const idSet = new Set<string>();
+    recs.forEach((r) => idSet.add(r.player_id));
+    details.forEach((g) => idSet.add(g.player_id));
+
+    const orderedIds: string[] = [];
+    players.forEach((p) => {
+      if (idSet.has(p.player_id)) {
+        orderedIds.push(p.player_id);
+        idSet.delete(p.player_id);
+      }
+    });
+    idSet.forEach((id) => orderedIds.push(id));
+
+    const chips: Record<string, number> = {};
+    orderedIds.forEach((id) => {
+      chips[id] = 0;
+    });
+    recs.forEach((r) => {
+      chips[r.player_id] = r.chip_diff;
+    });
+
+    const gameMap = new Map<number, GameDetail[]>();
+    for (const g of details) {
+      const list = gameMap.get(g.game_number) ?? [];
+      list.push(g);
+      gameMap.set(g.game_number, list);
+    }
+
+    const draftGames: DraftGame[] = Array.from(gameMap.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([, list], idx) => ({
+        game_number: idx + 1,
+        details: [...list]
+          .sort((a, b) => WINDS.indexOf(a.wind) - WINDS.indexOf(b.wind))
+          .map((d) => ({
+            ...d,
+            game_number: idx + 1,
+            player_name: getPlayerName(d.player_id, d.player_name),
+          })),
+      }));
+
+    onViewSession({
+      mode: 'view',
+      session_id: row.session_id,
+      date: row.date,
+      participant_ids: orderedIds,
+      rule_snapshot: appliedRules,
+      games: draftGames,
+      chips,
+    });
+  };
 
   const pointClass = (val: number) =>
     val > 0 ? 'point-pos' : val < 0 ? 'point-neg' : 'point-zero';
@@ -182,7 +235,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             style={{ color: 'var(--color-text-secondary)' }}
           >
             {selectedPeriod === 'ALL' ? '全期間' : `${selectedPeriod}年`} ·{' '}
-            {sessionRows.length} 対局（行をタップで詳細表示）
+            {sessionRows.length} 対局（行をタップで成績表示）
           </p>
         </div>
 
@@ -205,18 +258,41 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
       {/* Scrollable Sticky History Table */}
       <div className="sticky-table-wrap">
-        <table className="score-table history-table">
-          <thead>
-            <tr className="header-names">
-              <th className="sticky-col">日付</th>
+        {visibleColumns.length === 0 ? (
+          <div
+            className="p-12 text-center text-sm"
+            style={{ color: 'var(--color-text-muted)' }}
+          >
+            表示できる対局者データがありません。
+          </div>
+        ) : (
+          <table
+            className={`score-table history-table ${
+              visibleColumns.length > 4 ? 'score-table-scrollable' : ''
+            }`}
+          >
+            <colgroup>
+              <col style={{ width: 'var(--sticky-col-w)' }} />
               {visibleColumns.map((p) => (
-                <th key={p.player_id}>
-                  <span className="block truncate max-w-[128px] mx-auto">
-                    {p.name}
-                  </span>
-                </th>
+                <col
+                  key={p.player_id}
+                  style={
+                    visibleColumns.length > 4
+                      ? { width: 'var(--player-col-w)' }
+                      : undefined
+                  }
+                />
               ))}
-            </tr>
+            </colgroup>
+            <thead>
+              <tr className="header-names">
+                <th className="sticky-col">日付</th>
+                {visibleColumns.map((p) => (
+                  <th key={p.player_id}>
+                    <span className="block truncate w-full">{p.name}</span>
+                  </th>
+                ))}
+              </tr>
             <tr className="summary-row-1">
               <th className="sticky-col">合計</th>
               {visibleColumns.map((p) => {
@@ -272,7 +348,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               sessionRows.map((row) => (
                 <tr
                   key={row.session_id}
-                  onClick={() => setDetailSessionId(row.session_id)}
+                  onClick={() => handleOpenSessionView(row)}
                   className="cursor-pointer hover:bg-[#faf9f5] transition-colors"
                 >
                   <th className="sticky-col">
@@ -312,8 +388,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                 </tr>
               ))
             )}
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* Period Filter Modal */}
@@ -399,24 +476,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         </div>
       )}
 
-      {/* Session Detail Modal */}
-      {activeDetailSession && (
-        <HistoryDetailModal
-          open={Boolean(activeDetailSession)}
-          sessionId={activeDetailSession.sessionId}
-          date={activeDetailSession.date}
-          dailyRecords={activeDetailSession.dailyRecords}
-          gameDetails={activeDetailSession.gameDetails}
-          players={players}
-          currentRules={currentRules}
-          onEdit={(draft) => {
-            setDetailSessionId(null);
-            onEditSession(draft);
-          }}
-          onDelete={onDeleteSession}
-          onClose={() => setDetailSessionId(null)}
-        />
-      )}
     </div>
   );
 };

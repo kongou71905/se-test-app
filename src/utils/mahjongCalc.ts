@@ -110,6 +110,14 @@ export function validatePositiveInteger(value: string): number | null {
   return num;
 }
 
+export function validateNegativeInteger(value: string): number | null {
+  const trimmed = value.trim();
+  if (!/^-\d+$/.test(trimmed)) return null;
+  const num = Number(trimmed);
+  if (!Number.isSafeInteger(num) || num >= 0) return null;
+  return num;
+}
+
 export function sanitizeRuleConfig(
   partial: Partial<Record<keyof RuleConfig, string>>,
   fallback: RuleConfig = DEFAULT_RULE_CONFIG
@@ -138,6 +146,23 @@ export function sanitizeRuleConfig(
     fb: 'true' | 'false'
   ): 'true' | 'false' => (val === 'true' || val === 'false' ? val : fb);
 
+  const validTobiBustedPoint =
+    partial.tobi_busted_point &&
+    validateNegativeInteger(partial.tobi_busted_point) !== null
+      ? String(Number(partial.tobi_busted_point.trim()))
+      : fallback.tobi_busted_point;
+
+  const validTobiFlyerPoint =
+    partial.tobi_flyer_point &&
+    validatePositiveInteger(partial.tobi_flyer_point) !== null
+      ? String(Number(partial.tobi_flyer_point.trim()))
+      : fallback.tobi_flyer_point;
+
+  const validChipRate =
+    partial.chip_rate && validatePositiveInteger(partial.chip_rate) !== null
+      ? String(Number(partial.chip_rate.trim()))
+      : fallback.chip_rate;
+
   const validRate =
     partial.settlement_rate && validatePositiveInteger(partial.settlement_rate) !== null
       ? String(Number(partial.settlement_rate.trim()))
@@ -149,11 +174,26 @@ export function sanitizeRuleConfig(
     return_points,
     uma_pattern,
     use_tobi: parseBoolStr(partial.use_tobi, fallback.use_tobi),
+    tobi_busted_point: validTobiBustedPoint,
+    tobi_flyer_point: validTobiFlyerPoint,
     use_yakitori: parseBoolStr(partial.use_yakitori, fallback.use_yakitori),
     use_chip: parseBoolStr(partial.use_chip, fallback.use_chip),
+    chip_rate: validChipRate,
     use_settlement: parseBoolStr(partial.use_settlement, fallback.use_settlement),
     settlement_rate: validRate,
   };
+}
+
+export function getTobiBustedPoint(rules: RuleConfig): number {
+  return validateNegativeInteger(rules.tobi_busted_point) ?? -5;
+}
+
+export function getTobiFlyerPoint(rules: RuleConfig): number {
+  return validatePositiveInteger(rules.tobi_flyer_point) ?? 5;
+}
+
+export function getChipRate(rules: RuleConfig): number {
+  return validatePositiveInteger(rules.chip_rate) ?? 2;
 }
 
 export function parseSettingsRowsToRuleConfig(rows: SettingRow[]): RuleConfig {
@@ -186,7 +226,14 @@ export function parseRuleSnapshot(
   }
   try {
     const parsed = JSON.parse(snapshotStr) as Partial<Record<keyof RuleConfig, string>>;
-    return sanitizeRuleConfig(parsed, currentSettings);
+    // Preserve original defaults (-5/+5 tobi, x2 chip) for older snapshots created before these fields existed
+    const snapshotFallback: RuleConfig = {
+      ...currentSettings,
+      tobi_busted_point: DEFAULT_RULE_CONFIG.tobi_busted_point,
+      tobi_flyer_point: DEFAULT_RULE_CONFIG.tobi_flyer_point,
+      chip_rate: DEFAULT_RULE_CONFIG.chip_rate,
+    };
+    return sanitizeRuleConfig(parsed, snapshotFallback);
   } catch {
     return { ...currentSettings };
   }
@@ -198,9 +245,13 @@ export function getRuleSummaryText(rules: RuleConfig): string {
   const retLabel = Number(rules.return_points).toLocaleString('ja-JP');
   const umaLabel = rules.uma_pattern === '0-0' ? 'ウマなし' : `ウマ${rules.uma_pattern}`;
   const extras: string[] = [];
-  if (rules.use_tobi === 'true') extras.push('飛び');
+  if (rules.use_tobi === 'true') {
+    extras.push(
+      `飛び(${getTobiBustedPoint(rules)}/${formatPoint(getTobiFlyerPoint(rules))})`
+    );
+  }
   if (rules.use_yakitori === 'true') extras.push('焼き鳥');
-  if (rules.use_chip === 'true') extras.push('チップ');
+  if (rules.use_chip === 'true') extras.push(`チップ(${getChipRate(rules)}pt)`);
   const extrasText = extras.length > 0 ? extras.join('・') : '特殊なし';
   return `${typeLabel} · ${startLabel}/${retLabel} · ${umaLabel} · ${extrasText}`;
 }
@@ -259,6 +310,8 @@ export function calculateGameDetails(params: {
   basePointsByPlayer.set(sorted[0].player_id, normalizeZero(-sum234));
 
   // Tobi calculation
+  const tobiBustedPoint = getTobiBustedPoint(rules);
+  const tobiFlyerPoint = getTobiFlyerPoint(rules);
   const tobiEnabled =
     rules.use_tobi === 'true' &&
     tobi.enabled &&
@@ -303,10 +356,10 @@ export function calculateGameDetails(params: {
       if (tobiEnabled) {
         if (tobi.busted_ids.includes(entry.player_id)) {
           is_tobi = true;
-          tobiPoint = -5;
+          tobiPoint = tobiBustedPoint;
         } else if (tobi.flyer_id === entry.player_id) {
           tobi_count = tobi.busted_ids.length;
-          tobiPoint = 5 * tobi_count;
+          tobiPoint = tobiFlyerPoint * tobi_count;
         }
       }
 
@@ -379,6 +432,7 @@ export function buildSessionSavePayload(
   });
 
   const dailyRecords: DailyRecord[] = [];
+  const chipRate = getChipRate(draft.rule_snapshot);
   for (const pid of draft.participant_ids) {
     const game_count = gameCountMap.get(pid) ?? 0;
     const chip_diff = useChip ? normalizeZero(draft.chips[pid] ?? 0) : 0;
@@ -386,7 +440,7 @@ export function buildSessionSavePayload(
     if (game_count === 0 && chip_diff === 0) {
       continue;
     }
-    const chip_point = useChip ? normalizeZero(chip_diff * 2) : 0;
+    const chip_point = useChip ? normalizeZero(chip_diff * chipRate) : 0;
     const gameSum = gameSumMap.get(pid) ?? 0;
     const total_point = normalizeZero(gameSum + chip_point);
     const player_name = playerMap.get(pid)?.name ?? pid;

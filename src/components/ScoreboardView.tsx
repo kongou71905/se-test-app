@@ -1,10 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import {
+  ArrowLeft,
   Calculator,
   Coins,
+  Pencil,
   PlusCircle,
   RotateCcw,
   Save,
+  Trash2,
 } from 'lucide-react';
 import {
   GameDetail,
@@ -13,6 +16,7 @@ import {
 } from '../types/mahjong';
 import {
   formatPoint,
+  getChipRate,
   getRuleSummaryText,
   normalizeZero,
 } from '../utils/mahjongCalc';
@@ -25,7 +29,10 @@ interface ScoreboardViewProps {
   draft: SessionDraft;
   players: Player[];
   onUpdateDraft: (nextDraft: SessionDraft) => void;
+  onEnterEditMode: () => void;
+  onBackFromView: () => void;
   onFinalizeSession: (draft: SessionDraft) => Promise<void>;
+  onDeleteSession: (sessionId: string) => Promise<void>;
   onDiscardDraft: () => void;
 }
 
@@ -33,7 +40,10 @@ export const ScoreboardView: React.FC<ScoreboardViewProps> = ({
   draft,
   players,
   onUpdateDraft,
+  onEnterEditMode,
+  onBackFromView,
   onFinalizeSession,
+  onDeleteSession,
   onDiscardDraft,
 }) => {
   const [gameModalOpen, setGameModalOpen] = useState(false);
@@ -42,8 +52,13 @@ export const ScoreboardView: React.FC<ScoreboardViewProps> = ({
   const [settlementModalOpen, setSettlementModalOpen] = useState(false);
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
   const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
+  const [confirmDeleteSessionOpen, setConfirmDeleteSessionOpen] =
+    useState(false);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const isViewMode = draft.mode === 'view';
+  const isEditMode = draft.mode === 'edit';
 
   const playerMap = useMemo(
     () => new Map(players.map((p) => [p.player_id, p])),
@@ -63,6 +78,7 @@ export const ScoreboardView: React.FC<ScoreboardViewProps> = ({
   }, [draft.participant_ids, playerMap]);
 
   const useChip = draft.rule_snapshot.use_chip === 'true';
+  const chipRate = getChipRate(draft.rule_snapshot);
   const useSettlement = draft.rule_snapshot.use_settlement === 'true';
   const settlementRate = Number(draft.rule_snapshot.settlement_rate) || 50;
 
@@ -82,19 +98,21 @@ export const ScoreboardView: React.FC<ScoreboardViewProps> = ({
     });
     draft.participant_ids.forEach((id) => {
       const chipPt = useChip
-        ? normalizeZero((draft.chips[id] ?? 0) * 2)
+        ? normalizeZero((draft.chips[id] ?? 0) * chipRate)
         : 0;
       totals[id] = normalizeZero((gSums[id] ?? 0) + chipPt);
     });
     return { gameSums: gSums, totalsByPlayer: totals };
-  }, [draft, useChip]);
+  }, [draft, useChip, chipRate]);
 
   const handleOpenNewGame = () => {
+    if (isViewMode) return;
     setEditingGameIdx(null);
     setGameModalOpen(true);
   };
 
   const handleOpenEditGame = (idx: number) => {
+    if (isViewMode) return;
     setEditingGameIdx(idx);
     setGameModalOpen(true);
   };
@@ -179,6 +197,22 @@ export const ScoreboardView: React.FC<ScoreboardViewProps> = ({
     }
   };
 
+  const handleConfirmDeleteSession = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await onDeleteSession(draft.session_id);
+      setConfirmDeleteSessionOpen(false);
+    } catch (err) {
+      setConfirmDeleteSessionOpen(false);
+      setNoticeMessage(
+        err instanceof Error ? err.message : '対局データの削除に失敗しました。'
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const gameTypeLabel =
     draft.rule_snapshot.game_type === 'hanchan' ? '半荘' : '東風';
   const sessionTitle = `${gameTypeLabel}第${draft.games.length}戦`;
@@ -199,12 +233,20 @@ export const ScoreboardView: React.FC<ScoreboardViewProps> = ({
             >
               {draft.date}
             </span>
-            {draft.mode === 'edit' && (
+            {isEditMode && (
               <span
                 className="text-xs font-bold"
                 style={{ color: 'var(--color-warning)' }}
               >
                 · 過去データ編集モード
+              </span>
+            )}
+            {isViewMode && (
+              <span
+                className="text-xs font-bold"
+                style={{ color: 'var(--color-text-secondary)' }}
+              >
+                · 閲覧モード
               </span>
             )}
           </div>
@@ -216,33 +258,72 @@ export const ScoreboardView: React.FC<ScoreboardViewProps> = ({
           </p>
         </div>
 
-        <button
-          type="button"
-          className="btn btn-ghost text-xs px-3"
-          style={{ color: 'var(--color-danger)' }}
-          onClick={() => setConfirmDiscardOpen(true)}
-          disabled={saving}
-        >
-          <RotateCcw size={14} />
-          <span>
-            {draft.mode === 'edit'
-              ? '編集を破棄して戻る'
-              : '対局を破棄（トップへ戻る）'}
-          </span>
-        </button>
+        {isViewMode ? (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={onBackFromView}
+          >
+            <ArrowLeft size={16} />
+            <span>過去データへ戻る</span>
+          </button>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            {isEditMode && (
+              <button
+                type="button"
+                className="btn btn-danger text-xs px-3"
+                onClick={() => setConfirmDeleteSessionOpen(true)}
+                disabled={saving}
+              >
+                <Trash2 size={14} />
+                <span>削除</span>
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-ghost text-xs px-3"
+              style={{ color: 'var(--color-danger)' }}
+              onClick={() => setConfirmDiscardOpen(true)}
+              disabled={saving}
+            >
+              <RotateCcw size={14} />
+              <span>
+                {isEditMode
+                  ? '編集を破棄して戻る'
+                  : '対局を破棄（トップへ戻る）'}
+              </span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Scrollable Sticky Scoreboard Table */}
       <div className="sticky-table-wrap">
-        <table className="score-table scoreboard-table">
+        <table
+          className={`score-table scoreboard-table ${
+            participants.length > 4 ? 'score-table-scrollable' : ''
+          }`}
+        >
+          <colgroup>
+            <col style={{ width: 'var(--sticky-col-w)' }} />
+            {participants.map((p) => (
+              <col
+                key={p.player_id}
+                style={
+                  participants.length > 4
+                    ? { width: 'var(--player-col-w)' }
+                    : undefined
+                }
+              />
+            ))}
+          </colgroup>
           <thead>
             <tr>
               <th className="sticky-col">試合</th>
               {participants.map((p) => (
                 <th key={p.player_id}>
-                  <span className="block truncate max-w-[128px] mx-auto">
-                    {p.name}
-                  </span>
+                  <span className="block truncate w-full">{p.name}</span>
                 </th>
               ))}
             </tr>
@@ -256,7 +337,9 @@ export const ScoreboardView: React.FC<ScoreboardViewProps> = ({
                   className="py-12 text-sm"
                   style={{ color: 'var(--color-text-muted)' }}
                 >
-                  まだ試合が入力されていません。下の「入力」ボタンから第1戦を追加してください。
+                  {isViewMode
+                    ? '試合データはありません（チップのみの記録です）。'
+                    : 'まだ試合が入力されていません。下の「入力」ボタンから第1戦を追加してください。'}
                 </td>
               </tr>
             ) : (
@@ -267,8 +350,14 @@ export const ScoreboardView: React.FC<ScoreboardViewProps> = ({
                 return (
                   <tr
                     key={game.game_number}
-                    onClick={() => handleOpenEditGame(idx)}
-                    className="cursor-pointer hover:bg-[#faf9f5] transition-colors"
+                    onClick={
+                      isViewMode ? undefined : () => handleOpenEditGame(idx)
+                    }
+                    className={
+                      isViewMode
+                        ? ''
+                        : 'cursor-pointer hover:bg-[#faf9f5] transition-colors'
+                    }
                   >
                     <th className="sticky-col">
                       <span className="tabular-nums">第{idx + 1}戦</span>
@@ -341,7 +430,7 @@ export const ScoreboardView: React.FC<ScoreboardViewProps> = ({
                 <th className="sticky-col">チップ</th>
                 {participants.map((p) => {
                   const diff = normalizeZero(draft.chips[p.player_id] ?? 0);
-                  const chipPt = normalizeZero(diff * 2);
+                  const chipPt = normalizeZero(diff * chipRate);
                   return (
                     <td
                       key={p.player_id}
@@ -373,60 +462,87 @@ export const ScoreboardView: React.FC<ScoreboardViewProps> = ({
 
       {/* Bottom Action Bar */}
       <div className="surface-card p-3 flex flex-wrap items-center justify-between gap-2.5 shrink-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={handleOpenNewGame}
-            disabled={saving}
-          >
-            <PlusCircle size={18} />
-            <span>入力</span>
-          </button>
-
-          {useChip && (
+        {isViewMode ? (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              {useSettlement && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setSettlementModalOpen(true)}
+                >
+                  <Calculator size={18} />
+                  <span>集計</span>
+                </button>
+              )}
+            </div>
             <button
               type="button"
-              className="btn btn-secondary"
-              onClick={() => setChipModalOpen(true)}
-              disabled={saving}
+              className="btn btn-primary min-w-[120px]"
+              onClick={onEnterEditMode}
             >
-              <Coins size={18} />
-              <span>チップ</span>
+              <Pencil size={18} />
+              <span>編集</span>
             </button>
-          )}
+          </>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleOpenNewGame}
+                disabled={saving}
+              >
+                <PlusCircle size={18} />
+                <span>入力</span>
+              </button>
 
-          {useSettlement && (
+              {useChip && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setChipModalOpen(true)}
+                  disabled={saving}
+                >
+                  <Coins size={18} />
+                  <span>チップ</span>
+                </button>
+              )}
+
+              {useSettlement && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setSettlementModalOpen(true)}
+                  disabled={saving}
+                >
+                  <Calculator size={18} />
+                  <span>集計</span>
+                </button>
+              )}
+            </div>
+
             <button
               type="button"
-              className="btn btn-secondary"
-              onClick={() => setSettlementModalOpen(true)}
+              className="btn btn-primary min-w-[120px]"
+              style={{
+                backgroundColor: '#1e293b',
+              }}
+              onClick={handleRequestFinalize}
               disabled={saving}
             >
-              <Calculator size={18} />
-              <span>集計</span>
+              <Save size={18} />
+              <span>
+                {saving
+                  ? '保存中...'
+                  : isEditMode
+                    ? '更新保存'
+                    : '終了'}
+              </span>
             </button>
-          )}
-        </div>
-
-        <button
-          type="button"
-          className="btn btn-primary min-w-[120px]"
-          style={{
-            backgroundColor: '#1e293b',
-          }}
-          onClick={handleRequestFinalize}
-          disabled={saving}
-        >
-          <Save size={18} />
-          <span>
-            {saving
-              ? '保存中...'
-              : draft.mode === 'edit'
-                ? '更新保存'
-                : '終了'}
-          </span>
-        </button>
+          </>
+        )}
       </div>
 
       {/* Modals */}
@@ -461,6 +577,7 @@ export const ScoreboardView: React.FC<ScoreboardViewProps> = ({
           open={chipModalOpen}
           participants={participants}
           initialChips={draft.chips}
+          chipRate={chipRate}
           onSave={handleSaveChips}
           onClose={() => setChipModalOpen(false)}
         />
@@ -506,6 +623,18 @@ export const ScoreboardView: React.FC<ScoreboardViewProps> = ({
           onDiscardDraft();
         }}
         onCancel={() => setConfirmDiscardOpen(false)}
+      />
+
+      <ConfirmModal
+        open={confirmDeleteSessionOpen}
+        title="対局データを削除"
+        message={`${draft.date} のこの対局データを削除しますか？\n関連する試合詳細もすべて削除されます。この操作は取り消せません。`}
+        confirmLabel={saving ? '削除中...' : '削除する'}
+        confirmTone="danger"
+        onConfirm={handleConfirmDeleteSession}
+        onCancel={() => {
+          if (!saving) setConfirmDeleteSessionOpen(false);
+        }}
       />
 
       <ConfirmModal

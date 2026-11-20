@@ -12,6 +12,8 @@ import {
   calculateGameDetails,
   formatNumber,
   formatPoint,
+  getTobiBustedPoint,
+  getTobiFlyerPoint,
 } from '../utils/mahjongCalc';
 import { ConfirmModal } from './ConfirmModal';
 
@@ -72,6 +74,8 @@ export const GameScoreModal: React.FC<GameScoreModalProps> = ({
     buildInitialSeats(participants, initialGame)
   );
   const [activeSeatIndex, setActiveSeatIndex] = useState<number>(0);
+  const tobiBustedPt = getTobiBustedPoint(rules);
+  const tobiFlyerPt = getTobiFlyerPoint(rules);
 
   const [tobiEnabled, setTobiEnabled] = useState<boolean>(() => {
     if (!initialGame) return false;
@@ -654,14 +658,16 @@ export const GameScoreModal: React.FC<GameScoreModalProps> = ({
             <section className="surface-card p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-bold">トビ賞（±5）</div>
-                  <div
-                    className="text-xs"
-                    style={{ color: 'var(--color-text-secondary)' }}
-                  >
-                    飛んだ人 -5pt / 飛ばした人 +5pt × 飛ばし人数
+                  <div className="text-sm font-bold">
+                    トビ賞（{tobiBustedPt} / {formatPoint(tobiFlyerPt)}）
                   </div>
-                </div>
+                    <div
+                      className="text-xs tabular-nums"
+                      style={{ color: 'var(--color-text-secondary)' }}
+                    >
+                      飛んだ人 {tobiBustedPt}pt / 飛ばした人 {formatPoint(tobiFlyerPt)}pt × 飛ばし人数
+                    </div>
+                  </div>
                 <button
                   type="button"
                   onClick={() => {
@@ -887,14 +893,12 @@ export const GameScoreModal: React.FC<GameScoreModalProps> = ({
         title="合計点数の確認"
         message={
           confirmSumPayload
-            ? `合計点数が ${formatNumber(confirmSumPayload.sum)} 点（基準点 ${formatNumber(
-                confirmSumPayload.expected
-              )} 点と ${formatNumber(
-                Math.abs(confirmSumPayload.sum - confirmSumPayload.expected)
-              )} 点差）です。\n供託残などの場合はこのまま登録しますか？`
+            ? `全員の点数合計が${formatNumber(
+                confirmSumPayload.sum
+              )}点です。\n供託リーチ棒の残と一致する場合はトップ者に自動加算されるため問題ありません。\nこのまま成績を確定しますか？`
             : ''
         }
-        confirmLabel="このまま登録"
+        confirmLabel="このまま確定"
         onConfirm={() => {
           if (confirmSumPayload) {
             onSave(confirmSumPayload.details);

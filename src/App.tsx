@@ -162,7 +162,7 @@ export default function App() {
     setActiveDraft(nextDraft);
     if (nextDraft.mode === 'edit') {
       saveEditSessionDraft(nextDraft);
-    } else {
+    } else if (nextDraft.mode === 'new') {
       saveNewSessionDraft(nextDraft);
     }
   };
@@ -198,20 +198,37 @@ export default function App() {
     }
   };
 
-  const handleEditHistorySession = (editDraft: SessionDraft) => {
+  const handleViewHistorySession = (viewDraft: SessionDraft) => {
+    setActiveDraft(viewDraft);
+    setView('scoreboard');
+  };
+
+  const handleEnterEditMode = () => {
+    if (!activeDraft || activeDraft.mode !== 'view') return;
+    const editDraft: SessionDraft = {
+      ...activeDraft,
+      mode: 'edit',
+    };
     saveEditSessionDraft(editDraft);
     setActiveDraft(editDraft);
-    setView('scoreboard');
+  };
+
+  const handleBackFromView = () => {
+    setActiveDraft(null);
+    setView('history');
   };
 
   const handleDeleteHistorySession = async (sessionId: string) => {
     if (!storageMode) return;
     await deleteSessionApi(storageMode, gasUrl, sessionId);
+    clearEditSessionDraft();
     const refreshed = await fetchInitialData(storageMode, gasUrl);
     setPlayers(refreshed.players);
     setDailyRecords(refreshed.daily_records);
     setGameDetails(refreshed.game_details);
     setRules(parseSettingsRowsToRuleConfig(refreshed.settings));
+    setActiveDraft(null);
+    setView('history');
   };
 
   const activePlayerCount = useMemo(
@@ -382,7 +399,10 @@ export default function App() {
                 draft={activeDraft}
                 players={players}
                 onUpdateDraft={handleUpdateDraft}
+                onEnterEditMode={handleEnterEditMode}
+                onBackFromView={handleBackFromView}
                 onFinalizeSession={handleFinalizeSession}
+                onDeleteSession={handleDeleteHistorySession}
                 onDiscardDraft={handleDiscardDraft}
               />
             )}
@@ -393,8 +413,7 @@ export default function App() {
                 dailyRecords={dailyRecords}
                 gameDetails={gameDetails}
                 currentRules={rules}
-                onEditSession={handleEditHistorySession}
-                onDeleteSession={handleDeleteHistorySession}
+                onViewSession={handleViewHistorySession}
                 onBack={() => setView('top')}
               />
             )}

@@ -7,6 +7,7 @@ interface ChipModalProps {
   open: boolean;
   participants: Player[];
   initialChips: Record<string, number>;
+  chipRate?: number;
   onSave: (chips: Record<string, number>) => void;
   onClose: () => void;
 }
@@ -15,6 +16,7 @@ export const ChipModal: React.FC<ChipModalProps> = ({
   open,
   participants,
   initialChips,
+  chipRate = 2,
   onSave,
   onClose,
 }) => {
@@ -78,10 +80,10 @@ export const ChipModal: React.FC<ChipModalProps> = ({
               チップ増減入力
             </h3>
             <p
-              className="text-xs mt-0.5"
+              className="text-xs mt-0.5 tabular-nums"
               style={{ color: 'var(--color-text-secondary)' }}
             >
-              初期チップ20枚からの増減枚数を入力（1枚 = ±2pt · 合計 = 0枚）
+              チップの増減枚数を入力（1枚 = ±{chipRate}pt · 合計 = 0枚）
             </p>
           </div>
           <button
@@ -99,7 +101,7 @@ export const ChipModal: React.FC<ChipModalProps> = ({
             const valStr = chipValues[p.player_id] ?? '0';
             const valid = /^-?\d+$/.test(valStr.trim());
             const num = valid ? Number(valStr.trim()) : 0;
-            const pt = normalizeZero(num * 2);
+            const pt = normalizeZero(num * chipRate);
 
             return (
               <div

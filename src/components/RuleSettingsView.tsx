@@ -6,7 +6,10 @@ import {
   UMA_PATTERNS,
   UmaPatternKey,
 } from '../types/mahjong';
-import { validatePositiveInteger } from '../utils/mahjongCalc';
+import {
+  validateNegativeInteger,
+  validatePositiveInteger,
+} from '../utils/mahjongCalc';
 
 interface RuleSettingsViewProps {
   initialRules: RuleConfig;
@@ -20,6 +23,13 @@ export const RuleSettingsView: React.FC<RuleSettingsViewProps> = ({
   onCancel,
 }) => {
   const [form, setForm] = useState<RuleConfig>({ ...initialRules });
+  const [tobiBustedInput, setTobiBustedInput] = useState(
+    initialRules.tobi_busted_point
+  );
+  const [tobiFlyerInput, setTobiFlyerInput] = useState(
+    initialRules.tobi_flyer_point
+  );
+  const [chipRateInput, setChipRateInput] = useState(initialRules.chip_rate);
   const [rateInput, setRateInput] = useState(initialRules.settlement_rate);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -49,6 +59,21 @@ export const RuleSettingsView: React.FC<RuleSettingsViewProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    const validTobiBusted = validateNegativeInteger(tobiBustedInput);
+    if (validTobiBusted === null) {
+      setError('飛び（飛ばされた人）の増減点数は-1以下の負の整数を入力してください。');
+      return;
+    }
+    const validTobiFlyer = validatePositiveInteger(tobiFlyerInput);
+    if (validTobiFlyer === null) {
+      setError('飛び（飛ばした人）の増減点数は1以上の正の整数を入力してください。');
+      return;
+    }
+    const validChipRate = validatePositiveInteger(chipRateInput);
+    if (validChipRate === null) {
+      setError('チップ係数は1以上の正の整数を入力してください。');
+      return;
+    }
     const validRate = validatePositiveInteger(rateInput);
     if (validRate === null) {
       setError('精算係数は1以上の正の整数を入力してください。');
@@ -58,6 +83,9 @@ export const RuleSettingsView: React.FC<RuleSettingsViewProps> = ({
     try {
       await onSave({
         ...form,
+        tobi_busted_point: String(validTobiBusted),
+        tobi_flyer_point: String(validTobiFlyer),
+        chip_rate: String(validChipRate),
         settlement_rate: String(validRate),
       });
     } catch (err) {
@@ -186,7 +214,7 @@ export const RuleSettingsView: React.FC<RuleSettingsViewProps> = ({
                 {
                   key: 'use_tobi',
                   title: '飛び（トビ）',
-                  desc: '飛ばされた人 -5 / 飛ばした人 +5 × 人数',
+                  desc: '設定した増減点数（飛ばされた人 − / 飛ばした人 ＋ × 人数）を適用',
                 },
                 {
                   key: 'use_yakitori',
@@ -196,7 +224,7 @@ export const RuleSettingsView: React.FC<RuleSettingsViewProps> = ({
                 {
                   key: 'use_chip',
                   title: 'チップ',
-                  desc: '初期20枚からの増減 × 2pt を最終成績へ加算',
+                  desc: '増減枚数 × チップ係数を最終成績へ加算',
                 },
                 {
                   key: 'use_settlement',
@@ -245,30 +273,109 @@ export const RuleSettingsView: React.FC<RuleSettingsViewProps> = ({
           </div>
         </div>
 
-        {/* 精算係数 */}
-        <div>
-          <label
-            htmlFor="settlement-rate"
-            className="block text-sm font-semibold mb-2"
-          >
-            精算係数（正の整数）
-          </label>
-          <input
-            id="settlement-rate"
-            type="number"
-            inputMode="numeric"
-            min={1}
-            step={1}
-            className="input-field tabular-nums max-w-[200px]"
-            value={rateInput}
-            onChange={(e) => setRateInput(e.target.value)}
-          />
-          <p
-            className="mt-1.5 text-xs"
-            style={{ color: 'var(--color-text-muted)' }}
-          >
-            集計ポップアップ表示時に各対局者の成績へこの整数を乗算します（初期値: 50）。
-          </p>
+        {/* 飛びの増減点数設定 */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div>
+            <label
+              htmlFor="tobi-busted-point"
+              className="block text-sm font-semibold mb-2"
+            >
+              飛び：飛ばされた人（負の整数）
+            </label>
+            <input
+              id="tobi-busted-point"
+              type="number"
+              max={-1}
+              step={1}
+              className="input-field tabular-nums max-w-[200px]"
+              value={tobiBustedInput}
+              onChange={(e) => setTobiBustedInput(e.target.value)}
+            />
+            <p
+              className="mt-1.5 text-xs"
+              style={{ color: 'var(--color-text-muted)' }}
+            >
+              飛ばされた人に加算するマイナスの整数です（初期値: -5）。
+            </p>
+          </div>
+
+          <div>
+            <label
+              htmlFor="tobi-flyer-point"
+              className="block text-sm font-semibold mb-2"
+            >
+              飛び：飛ばした人（正の整数）
+            </label>
+            <input
+              id="tobi-flyer-point"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              step={1}
+              className="input-field tabular-nums max-w-[200px]"
+              value={tobiFlyerInput}
+              onChange={(e) => setTobiFlyerInput(e.target.value)}
+            />
+            <p
+              className="mt-1.5 text-xs"
+              style={{ color: 'var(--color-text-muted)' }}
+            >
+              飛ばした1人につき加算するプラスの整数です（初期値: +5）。
+            </p>
+          </div>
+        </div>
+
+        {/* 係数設定（チップ・精算） */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div>
+            <label
+              htmlFor="chip-rate"
+              className="block text-sm font-semibold mb-2"
+            >
+              チップ係数（1以上の整数）
+            </label>
+            <input
+              id="chip-rate"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              step={1}
+              className="input-field tabular-nums max-w-[200px]"
+              value={chipRateInput}
+              onChange={(e) => setChipRateInput(e.target.value)}
+            />
+            <p
+              className="mt-1.5 text-xs"
+              style={{ color: 'var(--color-text-muted)' }}
+            >
+              チップ1枚の増減につき加算するポイント数です（初期値: 2）。
+            </p>
+          </div>
+
+          <div>
+            <label
+              htmlFor="settlement-rate"
+              className="block text-sm font-semibold mb-2"
+            >
+              精算係数（1以上の整数）
+            </label>
+            <input
+              id="settlement-rate"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              step={1}
+              className="input-field tabular-nums max-w-[200px]"
+              value={rateInput}
+              onChange={(e) => setRateInput(e.target.value)}
+            />
+            <p
+              className="mt-1.5 text-xs"
+              style={{ color: 'var(--color-text-muted)' }}
+            >
+              集計ポップアップ表示時に各対局者の成績へこの整数を乗算します（初期値: 50）。
+            </p>
+          </div>
         </div>
 
         {error && (

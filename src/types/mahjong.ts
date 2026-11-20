@@ -56,8 +56,11 @@ export interface RuleConfig {
   return_points: '25000' | '30000' | '35000';
   uma_pattern: UmaPatternKey;
   use_tobi: 'true' | 'false';
+  tobi_busted_point: string; // negative integer string, default "-5"
+  tobi_flyer_point: string; // positive integer string, default "5"
   use_yakitori: 'true' | 'false';
   use_chip: 'true' | 'false';
+  chip_rate: string; // positive integer string, default "2"
   use_settlement: 'true' | 'false';
   settlement_rate: string; // positive integer string, default "50"
 }
@@ -68,7 +71,7 @@ export interface DraftGame {
 }
 
 export interface SessionDraft {
-  mode: 'new' | 'edit';
+  mode: 'new' | 'edit' | 'view';
   session_id: string;
   date: string; // YYYY/MM/DD
   participant_ids: string[];
@@ -151,8 +154,11 @@ export const DEFAULT_RULE_CONFIG: RuleConfig = {
   return_points: '30000',
   uma_pattern: '10-20',
   use_tobi: 'true',
+  tobi_busted_point: '-5',
+  tobi_flyer_point: '5',
   use_yakitori: 'true',
   use_chip: 'true',
+  chip_rate: '2',
   use_settlement: 'true',
   settlement_rate: '50',
 };
