@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  DEFAULT_RULE_CONFIG,
   POINTS_PATTERNS,
   PointsPatternKey,
   RuleConfig,
@@ -22,15 +23,22 @@ export const RuleSettingsView: React.FC<RuleSettingsViewProps> = ({
   onSave,
   onCancel,
 }) => {
-  const [form, setForm] = useState<RuleConfig>({ ...initialRules });
+  const [form, setForm] = useState<RuleConfig>({
+    ...DEFAULT_RULE_CONFIG,
+    ...initialRules,
+  });
   const [tobiBustedInput, setTobiBustedInput] = useState(
-    initialRules.tobi_busted_point
+    initialRules.tobi_busted_point ?? DEFAULT_RULE_CONFIG.tobi_busted_point
   );
   const [tobiFlyerInput, setTobiFlyerInput] = useState(
-    initialRules.tobi_flyer_point
+    initialRules.tobi_flyer_point ?? DEFAULT_RULE_CONFIG.tobi_flyer_point
   );
-  const [chipRateInput, setChipRateInput] = useState(initialRules.chip_rate);
-  const [rateInput, setRateInput] = useState(initialRules.settlement_rate);
+  const [chipRateInput, setChipRateInput] = useState(
+    initialRules.chip_rate ?? DEFAULT_RULE_CONFIG.chip_rate
+  );
+  const [rateInput, setRateInput] = useState(
+    initialRules.settlement_rate ?? DEFAULT_RULE_CONFIG.settlement_rate
+  );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 

@@ -84,7 +84,7 @@ export function validatePlayerName(
   allPlayers: Player[],
   editingPlayerId?: string
 ): string | null {
-  const name = rawName.trim();
+  const name = (rawName ?? '').trim();
   if (!name) {
     return '対局者名を入力してください。';
   }
@@ -102,16 +102,18 @@ export function validatePlayerName(
   return null;
 }
 
-export function validatePositiveInteger(value: string): number | null {
-  const trimmed = value.trim();
+export function validatePositiveInteger(value: string | number | undefined | null): number | null {
+  if (value === undefined || value === null) return null;
+  const trimmed = String(value).trim();
   if (!/^\d+$/.test(trimmed)) return null;
   const num = Number(trimmed);
   if (!Number.isSafeInteger(num) || num <= 0) return null;
   return num;
 }
 
-export function validateNegativeInteger(value: string): number | null {
-  const trimmed = value.trim();
+export function validateNegativeInteger(value: string | number | undefined | null): number | null {
+  if (value === undefined || value === null) return null;
+  const trimmed = String(value).trim();
   if (!/^-\d+$/.test(trimmed)) return null;
   const num = Number(trimmed);
   if (!Number.isSafeInteger(num) || num >= 0) return null;
@@ -146,27 +148,25 @@ export function sanitizeRuleConfig(
     fb: 'true' | 'false'
   ): 'true' | 'false' => (val === 'true' || val === 'false' ? val : fb);
 
+  const parsedTobiBusted = validateNegativeInteger(partial.tobi_busted_point);
   const validTobiBustedPoint =
-    partial.tobi_busted_point &&
-    validateNegativeInteger(partial.tobi_busted_point) !== null
-      ? String(Number(partial.tobi_busted_point.trim()))
+    parsedTobiBusted !== null
+      ? String(parsedTobiBusted)
       : fallback.tobi_busted_point;
 
+  const parsedTobiFlyer = validatePositiveInteger(partial.tobi_flyer_point);
   const validTobiFlyerPoint =
-    partial.tobi_flyer_point &&
-    validatePositiveInteger(partial.tobi_flyer_point) !== null
-      ? String(Number(partial.tobi_flyer_point.trim()))
+    parsedTobiFlyer !== null
+      ? String(parsedTobiFlyer)
       : fallback.tobi_flyer_point;
 
+  const parsedChipRate = validatePositiveInteger(partial.chip_rate);
   const validChipRate =
-    partial.chip_rate && validatePositiveInteger(partial.chip_rate) !== null
-      ? String(Number(partial.chip_rate.trim()))
-      : fallback.chip_rate;
+    parsedChipRate !== null ? String(parsedChipRate) : fallback.chip_rate;
 
+  const parsedRate = validatePositiveInteger(partial.settlement_rate);
   const validRate =
-    partial.settlement_rate && validatePositiveInteger(partial.settlement_rate) !== null
-      ? String(Number(partial.settlement_rate.trim()))
-      : fallback.settlement_rate;
+    parsedRate !== null ? String(parsedRate) : fallback.settlement_rate;
 
   return {
     game_type,
@@ -194,6 +194,16 @@ export function getTobiFlyerPoint(rules: RuleConfig): number {
 
 export function getChipRate(rules: RuleConfig): number {
   return validatePositiveInteger(rules.chip_rate) ?? 2;
+}
+
+export function getYakitoriPoints(yakitoriCount: number): {
+  penalty: number;
+  bonus: number;
+} {
+  if (yakitoriCount === 1) return { penalty: -15, bonus: 5 };
+  if (yakitoriCount === 2) return { penalty: -7, bonus: 7 };
+  if (yakitoriCount === 3) return { penalty: -5, bonus: 15 };
+  return { penalty: 0, bonus: 0 };
 }
 
 export function parseSettingsRowsToRuleConfig(rows: SettingRow[]): RuleConfig {
@@ -323,20 +333,10 @@ export function calculateGameDetails(params: {
     rules.use_yakitori === 'true' ? yakitori_ids : []
   );
   const yakitoriCount = yakitoriSet.size;
-  let yakitoriPenalty = 0;
-  let yakitoriBonus = 0;
-  if (rules.use_yakitori === 'true') {
-    if (yakitoriCount === 1) {
-      yakitoriPenalty = -15;
-      yakitoriBonus = 5;
-    } else if (yakitoriCount === 2) {
-      yakitoriPenalty = -7;
-      yakitoriBonus = 7;
-    } else if (yakitoriCount === 3) {
-      yakitoriPenalty = -5;
-      yakitoriBonus = 15;
-    }
-  }
+  const { penalty: yakitoriPenalty, bonus: yakitoriBonus } =
+    rules.use_yakitori === 'true'
+      ? getYakitoriPoints(yakitoriCount)
+      : { penalty: 0, bonus: 0 };
 
   const rankByPlayer = new Map<string, number>();
   sorted.forEach((item, idx) => {

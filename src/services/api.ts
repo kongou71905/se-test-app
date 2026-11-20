@@ -12,6 +12,7 @@ import {
   getNowTimestamp,
   parseSettingsRowsToRuleConfig,
   ruleConfigToSettingsRows,
+  sanitizeRuleConfig,
 } from '../utils/mahjongCalc';
 
 export const REQUIRED_API_VERSION = '1.0';
@@ -74,10 +75,30 @@ export function setStorageMode(mode: StorageMode): void {
   localStorage.setItem(LS_STORAGE_MODE, mode);
 }
 
+function normalizeRestoredDraft(raw: unknown): SessionDraft | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const draft = raw as Partial<SessionDraft>;
+  if (!draft.session_id || !Array.isArray(draft.participant_ids)) {
+    return null;
+  }
+  return {
+    mode: draft.mode === 'edit' || draft.mode === 'view' ? draft.mode : 'new',
+    session_id: draft.session_id,
+    date: typeof draft.date === 'string' ? draft.date : '',
+    participant_ids: draft.participant_ids,
+    rule_snapshot: sanitizeRuleConfig(
+      (draft.rule_snapshot ?? {}) as Record<string, string>,
+      DEFAULT_RULE_CONFIG
+    ),
+    games: Array.isArray(draft.games) ? draft.games : [],
+    chips: draft.chips && typeof draft.chips === 'object' ? draft.chips : {},
+  };
+}
+
 export function getNewSessionDraft(): SessionDraft | null {
   try {
     const raw = localStorage.getItem(LS_DRAFT_NEW);
-    return raw ? (JSON.parse(raw) as SessionDraft) : null;
+    return raw ? normalizeRestoredDraft(JSON.parse(raw)) : null;
   } catch {
     return null;
   }
@@ -94,7 +115,7 @@ export function clearNewSessionDraft(): void {
 export function getEditSessionDraft(): SessionDraft | null {
   try {
     const raw = localStorage.getItem(LS_DRAFT_EDIT);
-    return raw ? (JSON.parse(raw) as SessionDraft) : null;
+    return raw ? normalizeRestoredDraft(JSON.parse(raw)) : null;
   } catch {
     return null;
   }

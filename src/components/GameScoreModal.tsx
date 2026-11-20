@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Calculator, Check, Delete, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Calculator, Check, Delete, Trash2, X } from 'lucide-react';
 import {
   DraftGame,
   GameDetail,
@@ -14,6 +14,7 @@ import {
   formatPoint,
   getTobiBustedPoint,
   getTobiFlyerPoint,
+  getYakitoriPoints,
 } from '../utils/mahjongCalc';
 import { ConfirmModal } from './ConfirmModal';
 
@@ -100,6 +101,9 @@ export const GameScoreModal: React.FC<GameScoreModalProps> = ({
   });
 
   const [error, setError] = useState<string | null>(null);
+  const [confirmPreviewDetails, setConfirmPreviewDetails] = useState<
+    GameDetail[] | null
+  >(null);
   const [confirmSumPayload, setConfirmSumPayload] = useState<{
     details: GameDetail[];
     sum: number;
@@ -334,16 +338,20 @@ export const GameScoreModal: React.FC<GameScoreModalProps> = ({
       yakitori_ids: yakitoriIds,
     });
 
+    setConfirmPreviewDetails(details);
+  };
+
+  const handleConfirmPreview = () => {
+    if (!confirmPreviewDetails) return;
     if (currentScoreSum !== expectedSum) {
       setConfirmSumPayload({
-        details,
+        details: confirmPreviewDetails,
         sum: currentScoreSum,
         expected: expectedSum,
       });
       return;
     }
-
-    onSave(details);
+    onSave(confirmPreviewDetails);
   };
 
   if (!open) return null;
@@ -379,19 +387,29 @@ export const GameScoreModal: React.FC<GameScoreModalProps> = ({
           <div>
             <h3 id="game-score-modal-title" className="text-lg font-bold">
               {rules.game_type === 'hanchan' ? '半荘' : '東風'} 第{gameNumber}戦{' '}
-              {initialGame ? '編集' : '入力'}
+              {confirmPreviewDetails
+                ? '入力内容の確認'
+                : initialGame
+                  ? '編集'
+                  : '入力'}
             </h3>
             <p
               className="text-xs tabular-nums"
               style={{ color: 'var(--color-text-muted)' }}
             >
-              基準合計 {formatNumber(expectedSum)}点
-              {allScoresEntered && (
+              {confirmPreviewDetails ? (
+                <>1位〜4位の順位と入力内容を確認してください</>
+              ) : (
                 <>
-                  {' · '}現在合計 {formatNumber(currentScoreSum)}点
-                  {currentScoreSum !== expectedSum
-                    ? `（差 ${formatPoint(currentScoreSum - expectedSum)}）`
-                    : '（一致）'}
+                  基準合計 {formatNumber(expectedSum)}点
+                  {allScoresEntered && (
+                    <>
+                      {' · '}現在合計 {formatNumber(currentScoreSum)}点
+                      {currentScoreSum !== expectedSum
+                        ? `（差 ${formatPoint(currentScoreSum - expectedSum)}）`
+                        : '（一致）'}
+                    </>
+                  )}
                 </>
               )}
             </p>
@@ -408,6 +426,325 @@ export const GameScoreModal: React.FC<GameScoreModalProps> = ({
 
         {/* Scrollable Body */}
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+          {confirmPreviewDetails ? (
+            <>
+              {/* Summary Bar */}
+              <div
+                className="surface-card px-4 py-3 flex flex-wrap items-center justify-between gap-2"
+                style={{
+                  backgroundColor:
+                    currentScoreSum === expectedSum
+                      ? 'var(--color-accent-soft)'
+                      : 'var(--color-warning-soft)',
+                  borderColor:
+                    currentScoreSum === expectedSum
+                      ? 'var(--color-accent)'
+                      : '#eab308',
+                }}
+              >
+                <div className="text-sm font-bold tabular-nums">
+                  素点合計：{formatNumber(currentScoreSum)}点
+                </div>
+                <div
+                  className="text-xs font-semibold tabular-nums"
+                  style={{
+                    color:
+                      currentScoreSum === expectedSum
+                        ? 'var(--color-accent)'
+                        : 'var(--color-warning)',
+                  }}
+                >
+                  {currentScoreSum === expectedSum
+                    ? `基準合計（${formatNumber(expectedSum)}点）と一致`
+                    : `基準合計（${formatNumber(expectedSum)}点）と ${formatNumber(
+                        Math.abs(currentScoreSum - expectedSum)
+                      )}点差（${formatPoint(currentScoreSum - expectedSum)}）`}
+                </div>
+              </div>
+
+              {/* Ranked 1st -> 4th Confirmation Cards */}
+              {(() => {
+                const hasSpecialCols =
+                  rules.use_tobi === 'true' || rules.use_yakitori === 'true';
+                const previewYakitoriCount = confirmPreviewDetails.filter(
+                  (d) => d.is_yakitori
+                ).length;
+                const { penalty: yakitoriPenalty, bonus: yakitoriBonus } =
+                  rules.use_yakitori === 'true'
+                    ? getYakitoriPoints(previewYakitoriCount)
+                    : { penalty: 0, bonus: 0 };
+
+                return (
+                  <div className="surface-card overflow-hidden">
+                    <div
+                      className="hidden sm:grid items-center gap-3 px-4 py-2.5 text-xs font-bold border-b"
+                      style={{
+                        backgroundColor: 'var(--color-surface-subtle)',
+                        borderColor: 'var(--color-border)',
+                        color: 'var(--color-text-secondary)',
+                        gridTemplateColumns: 'minmax(0, 1fr) 118px minmax(0, 1fr)',
+                      }}
+                    >
+                      <div
+                        className="grid items-center gap-3.5"
+                        style={{
+                          gridTemplateColumns: '50px 42px minmax(0, 1fr)',
+                        }}
+                      >
+                        <span className="text-center">順位</span>
+                        <span className="text-center">方角</span>
+                        <span>対局者</span>
+                      </div>
+                      <span className="text-right">素点</span>
+                      <div
+                        className="grid items-center gap-3"
+                        style={{
+                          gridTemplateColumns: hasSpecialCols
+                            ? 'minmax(0, 1fr) 68px'
+                            : 'minmax(0, 1fr)',
+                        }}
+                      >
+                        {hasSpecialCols && (
+                          <span className="text-center">
+                            {[
+                              rules.use_tobi === 'true' ? '飛び' : null,
+                              rules.use_yakitori === 'true' ? '鳥' : null,
+                            ]
+                              .filter(Boolean)
+                              .join('・')}
+                          </span>
+                        )}
+                        <span className="text-right">結果pt</span>
+                      </div>
+                    </div>
+
+                    <div
+                      className="divide-y"
+                      style={{ borderColor: 'var(--color-border)' }}
+                    >
+                      {[...confirmPreviewDetails]
+                        .sort((a, b) => a.rank - b.rank)
+                        .map((detail) => {
+                          const yakitoriPt =
+                            rules.use_yakitori === 'true' &&
+                            previewYakitoriCount >= 1 &&
+                            previewYakitoriCount <= 3
+                              ? detail.is_yakitori
+                                ? yakitoriPenalty
+                                : yakitoriBonus
+                              : 0;
+                          const hasTobiBadge =
+                            rules.use_tobi === 'true' &&
+                            (detail.tobi_count > 0 || detail.is_tobi);
+                          const hasYakitoriBadge =
+                            rules.use_yakitori === 'true' &&
+                            (detail.is_yakitori || yakitoriPt > 0);
+                          const ptColor =
+                            detail.final_point > 0
+                              ? 'var(--color-positive)'
+                              : detail.final_point < 0
+                                ? 'var(--color-negative)'
+                                : 'var(--color-text-secondary)';
+
+                          return (
+                            <div
+                              key={detail.player_id}
+                              className="flex flex-col gap-2 px-4 py-3 sm:grid sm:items-center sm:gap-3"
+                              style={{
+                                borderColor: 'var(--color-border)',
+                                backgroundColor:
+                                  detail.rank === 1
+                                    ? 'rgba(22, 101, 52, 0.04)'
+                                    : 'var(--color-surface)',
+                                gridTemplateColumns:
+                                  'minmax(0, 1fr) 118px minmax(0, 1fr)',
+                              }}
+                            >
+                              {/* Left: Rank + Wind + Name (+ Raw Score on <640px) */}
+                              <div className="flex items-center justify-between gap-3 min-w-0 sm:contents">
+                                <div
+                                  className="flex items-center gap-3 min-w-0 flex-1 sm:grid sm:items-center sm:gap-3.5"
+                                  style={{
+                                    gridTemplateColumns:
+                                      '50px 42px minmax(0, 1fr)',
+                                  }}
+                                >
+                                  {/* Rank */}
+                                  <div className="flex justify-center shrink-0">
+                                    <span
+                                      className="inline-flex items-center justify-center w-11 h-8 rounded-lg text-sm font-extrabold tabular-nums"
+                                      style={{
+                                        backgroundColor:
+                                          detail.rank === 1
+                                            ? 'var(--color-accent)'
+                                            : 'var(--color-surface-subtle)',
+                                        color:
+                                          detail.rank === 1
+                                            ? '#ffffff'
+                                            : 'var(--color-text)',
+                                      }}
+                                    >
+                                      {detail.rank}位
+                                    </span>
+                                  </div>
+
+                                  {/* Wind */}
+                                  <div className="flex justify-center shrink-0">
+                                    <span
+                                      className="inline-flex items-center justify-center w-9 h-8 rounded-lg border text-sm font-bold"
+                                      style={{
+                                        backgroundColor: 'var(--color-surface)',
+                                        borderColor:
+                                          'var(--color-border-strong)',
+                                        color: 'var(--color-text)',
+                                      }}
+                                    >
+                                      {detail.wind}
+                                    </span>
+                                  </div>
+
+                                  {/* Player Name */}
+                                  <div className="min-w-0 font-bold text-[15px] truncate">
+                                    {detail.player_name}
+                                  </div>
+                                </div>
+
+                                {/* Center: Raw Score */}
+                                <div
+                                  className="text-right font-bold text-base tabular-nums whitespace-nowrap shrink-0 min-w-[84px] sm:min-w-0"
+                                  style={{
+                                    color:
+                                      detail.raw_score < 0
+                                        ? 'var(--color-negative)'
+                                        : 'var(--color-text)',
+                                  }}
+                                >
+                                  {formatNumber(detail.raw_score)}
+                                  <span
+                                    className="text-xs font-normal ml-0.5"
+                                    style={{
+                                      color:
+                                        detail.raw_score < 0
+                                          ? 'var(--color-negative)'
+                                          : 'var(--color-text-muted)',
+                                    }}
+                                  >
+                                    点
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Right: Tobi & Yakitori + Final Point */}
+                              <div
+                                className="flex items-center justify-between gap-3 pl-[104px] sm:pl-0 sm:grid sm:items-center sm:gap-3"
+                                style={{
+                                  gridTemplateColumns: hasSpecialCols
+                                    ? 'minmax(0, 1fr) 68px'
+                                    : 'minmax(0, 1fr)',
+                                }}
+                              >
+                                {hasSpecialCols && (
+                                  <div className="flex flex-wrap items-center sm:justify-center gap-1.5">
+                                    {rules.use_tobi === 'true' &&
+                                      detail.tobi_count > 0 && (
+                                        <span
+                                          className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md border text-xs font-extrabold tabular-nums whitespace-nowrap"
+                                          style={{
+                                            backgroundColor:
+                                              'var(--color-accent-soft)',
+                                            borderColor: '#bbf7d0',
+                                            color: 'var(--color-positive)',
+                                          }}
+                                          title={`飛ばした人数: ${detail.tobi_count}人`}
+                                        >
+                                          <span>飛</span>
+                                          <span>
+                                            {formatPoint(
+                                              tobiFlyerPt * detail.tobi_count
+                                            )}
+                                          </span>
+                                        </span>
+                                      )}
+                                    {rules.use_tobi === 'true' &&
+                                      detail.is_tobi && (
+                                        <span
+                                          className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md border text-xs font-extrabold tabular-nums whitespace-nowrap"
+                                          style={{
+                                            backgroundColor:
+                                              'var(--color-danger-soft)',
+                                            borderColor: '#fecaca',
+                                            color: 'var(--color-negative)',
+                                          }}
+                                          title="飛ばされた"
+                                        >
+                                          <span>飛</span>
+                                          <span>{tobiBustedPt}</span>
+                                        </span>
+                                      )}
+                                    {rules.use_yakitori === 'true' &&
+                                      detail.is_yakitori && (
+                                        <span
+                                          className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md border text-xs font-extrabold tabular-nums whitespace-nowrap"
+                                          style={{
+                                            backgroundColor:
+                                              'var(--color-danger-soft)',
+                                            borderColor: '#fecaca',
+                                            color: 'var(--color-negative)',
+                                          }}
+                                          title="焼き鳥"
+                                        >
+                                          <span>鳥</span>
+                                          <span>{formatPoint(yakitoriPt)}</span>
+                                        </span>
+                                      )}
+                                    {rules.use_yakitori === 'true' &&
+                                      !detail.is_yakitori &&
+                                      yakitoriPt > 0 && (
+                                        <span
+                                          className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md border text-xs font-extrabold tabular-nums whitespace-nowrap"
+                                          style={{
+                                            backgroundColor:
+                                              'var(--color-accent-soft)',
+                                            borderColor: '#bbf7d0',
+                                            color: 'var(--color-positive)',
+                                          }}
+                                          title="焼き鳥受取"
+                                        >
+                                          <span>鳥</span>
+                                          <span>{formatPoint(yakitoriPt)}</span>
+                                        </span>
+                                      )}
+                                    {!hasTobiBadge && !hasYakitoriBadge && (
+                                      <span
+                                        className="text-xs"
+                                        style={{
+                                          color: 'var(--color-text-muted)',
+                                        }}
+                                      >
+                                        ー
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Final Point */}
+                                <div
+                                  className="text-right font-extrabold text-base tabular-nums whitespace-nowrap ml-auto sm:ml-0"
+                                  style={{ color: ptColor }}
+                                >
+                                  {formatPoint(detail.final_point)}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                );
+              })()}
+            </>
+          ) : (
+            <>
           {/* 4-player chooser when session has 5+ participants */}
           {participants.length > 4 && (
             <section className="surface-card p-3.5">
@@ -845,6 +1182,8 @@ export const GameScoreModal: React.FC<GameScoreModalProps> = ({
               {error}
             </div>
           )}
+            </>
+          )}
         </div>
 
         {/* Footer */}
@@ -855,35 +1194,58 @@ export const GameScoreModal: React.FC<GameScoreModalProps> = ({
             borderColor: 'var(--color-border)',
           }}
         >
-          <div>
-            {initialGame && onDelete && (
+          {confirmPreviewDetails ? (
+            <>
               <button
                 type="button"
-                className="btn btn-danger"
-                onClick={() => setConfirmDeleteOpen(true)}
+                className="btn btn-secondary"
+                onClick={() => setConfirmPreviewDetails(null)}
               >
-                <Trash2 size={16} />
-                <span>削除</span>
+                <ArrowLeft size={16} />
+                <span>戻って修正</span>
               </button>
-            )}
-          </div>
-          <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={onClose}
-            >
-              キャンセル
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary min-w-[120px]"
-              onClick={handleSubmit}
-            >
-              <Check size={16} />
-              <span>{initialGame ? '更新' : '登録'}</span>
-            </button>
-          </div>
+              <button
+                type="button"
+                className="btn btn-primary min-w-[140px]"
+                onClick={handleConfirmPreview}
+              >
+                <Check size={16} />
+                <span>{initialGame ? '確定して更新' : '確定して登録'}</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <div>
+                {initialGame && onDelete && (
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => setConfirmDeleteOpen(true)}
+                  >
+                    <Trash2 size={16} />
+                    <span>削除</span>
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={onClose}
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary min-w-[120px]"
+                  onClick={handleSubmit}
+                >
+                  <Check size={16} />
+                  <span>{initialGame ? '更新' : '登録'}</span>
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
